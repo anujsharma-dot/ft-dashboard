@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 
 <html lang="en">
 <head>
@@ -281,6 +281,97 @@ let clientData = [];
 let ftData = [];
 let charts = {};
 let reportsGenerated = false;
+
+
+
+// BACKEND CONFIGURATION
+// Replace this with your Google Apps Script Web App URL
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw1Al3gVwLKiXt-YVWeOfE8PcsKgSQG-LYJkS7JLwf8bi_ZGKCVZAlTt5zAK5PV2415/exec';
+
+
+// Auto-load data from backend on page load
+window.addEventListener('DOMContentLoaded', async function() {
+  console.log('🔄 Checking for data on server...');
+  
+  try {
+    const response = await fetch(BACKEND_URL + '?action=getData');
+    const result = await response.json();
+    
+    if (result.success && result.clientData && result.ftData) {
+      console.log('✓ Data found on server');
+      
+      // Show loading screen
+      const loader = document.createElement('div');
+      loader.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1a2332;padding:40px;border-radius:12px;border:2px solid #3b82f6;z-index:99999;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.5)';
+      loader.innerHTML = '<h2 style="color:#3b82f6;margin-bottom:20px">📊 Loading Dashboard...</h2><p style="color:#7a97b8">Processing data from server</p>';
+      document.body.appendChild(loader);
+      
+      // Load data
+      clientData = result.clientData;
+      ftData = result.ftData;
+      
+      // Process and generate reports
+      await processDataAndGenerateReports();
+      
+      loader.remove();
+      
+      // Show success message
+      const msg = document.createElement('div');
+      msg.style.cssText = 'position:fixed;top:20px;right:20px;background:#10b981;color:#fff;padding:15px 25px;border-radius:8px;z-index:99999;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+      msg.textContent = '✓ Dashboard loaded! Last updated: ' + new Date(result.lastUpdated).toLocaleString();
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 5000);
+      
+    } else {
+      console.log('ℹ No data on server - upload required');
+    }
+  } catch(error) {
+    console.error('Failed to load from server:', error);
+  }
+});
+
+// Process data and generate reports
+async function processDataAndGenerateReports() {
+  const BATCH_SIZE = 250;
+  const totalRows = ftData.length;
+  
+  for (let i = 0; i < totalRows; i += BATCH_SIZE) {
+    const actualEnd = Math.min(i + BATCH_SIZE, totalRows);
+    
+    for (let j = i; j < actualEnd; j++) {
+      const row = ftData[j];
+      const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
+      if (client) {
+        row['GL Name'] = client['GL Name'];
+        row['TL Name'] = client['TL Name'];
+        row['Age'] = client['Age'];
+        row['State'] = client['State'];
+        row['IS DIY'] = client['IS DIY'];
+      }
+      row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
+      row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
+    }
+    await new Promise(resolve => setTimeout(resolve, 1));
+  }
+  
+  generateUnitReport();
+  generateGLReport();
+  generateModeReport();
+  generateMOMReport();
+  generateVolumeReport();
+  generateUserReport();
+  generateAgeReport();
+  generateDIYReport();
+  
+  reportsGenerated = true;
+  console.log('✓ All reports generated');
+}
+
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 
 // Load data from localStorage on page load
 window.addEventListener('DOMContentLoaded', function() {
