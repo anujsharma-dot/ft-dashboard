@@ -287,6 +287,97 @@ let charts = {};
 let reportsGenerated = false;
 
 
+// GOOGLE APPS SCRIPT BACKEND CONFIGURATION
+// Replace with YOUR Web App URL after deployment
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbxTOK55Qsw7I2OGXUOMdaBl0Dn7OZwwWYGiXtytwx0RfrRpNg3RFgwouF_0ryPhD1WT/exec';
+
+// Load data using JSONP (bypasses CORS)
+function loadDataFromBackend() {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    const callbackName = 'dataCallback_' + Date.now();
+    
+    window[callbackName] = function(data) {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
+    
+    script.src = BACKEND_URL + '?action=getData&callback=' + callbackName;
+    script.onerror = () => {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      reject(new Error('Failed to load data'));
+    };
+    
+    document.body.appendChild(script);
+  });
+}
+
+// Auto-load data on page load
+window.addEventListener('DOMContentLoaded', async function() {
+  console.log('🔄 Loading data from server...');
+  
+  try {
+    const result = await loadDataFromBackend();
+    
+    if (result.success && result.clientData && result.ftData) {
+      console.log('✓ Data loaded from server');
+      
+      // Load data
+      clientData = result.clientData;
+      ftData = result.ftData;
+      
+      // Process data in batches
+      const BATCH_SIZE = 250;
+      for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
+        const end = Math.min(i + BATCH_SIZE, ftData.length);
+        for (let j = i; j < end; j++) {
+          const row = ftData[j];
+          const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
+          if (client) {
+            row['GL Name'] = client['GL Name'];
+            row['TL Name'] = client['TL Name'];
+            row['Age'] = client['Age'];
+            row['State'] = client['State'];
+            row['IS DIY'] = client['IS DIY'];
+          }
+          row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
+          row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
+      
+      // Generate all reports
+      generateUnitReport();
+      generateGLReport();
+      generateModeReport();
+      generateMOMReport();
+      generateVolumeReport();
+      generateUserReport();
+      generateAgeReport();
+      generateDIYReport();
+      
+      reportsGenerated = true;
+      console.log('✅ Dashboard ready!');
+      
+      // Show success message
+      const msg = document.createElement('div');
+      msg.style.cssText = 'position:fixed;top:20px;right:20px;background:#10b981;color:#fff;padding:15px 25px;border-radius:8px;z-index:99999;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+      msg.textContent = '✓ Dashboard loaded! Updated: ' + new Date(result.lastUpdated).toLocaleString();
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 5000);
+      
+    } else {
+      console.log('ℹ No data on server yet - please upload');
+    }
+  } catch(error) {
+    console.log('ℹ Waiting for first data upload');
+  }
+});
+
+
+
 // GITHUB CONFIGURATION
 const GITHUB_USER = 'anujsharma-dot';
 const GITHUB_REPO = 'ft-dashboard';
@@ -562,7 +653,7 @@ document.getElementById('processBtn').addEventListener('click', async function()
   btn.textContent = '⏳ Processing...';
   
   try {
-    // Process data in batches
+    // Process data
     const BATCH_SIZE = 250;
     for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
       const end = Math.min(i + BATCH_SIZE, ftData.length);
@@ -593,31 +684,37 @@ document.getElementById('processBtn').addEventListener('click', async function()
     generateDIYReport();
     
     reportsGenerated = true;
+    btn.textContent = '⏳ Saving to server...';
     
-    // Auto-download JSON
-    const dataToSave = {
-      clientData: clientData,
-      ftData: ftData,
-      lastUpdated: new Date().toISOString()
-    };
-    
-    const blob = new Blob([JSON.stringify(dataToSave)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'dashboard-data.json';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    btn.textContent = '✅ Complete - Check Downloads!';
-    
-    setTimeout(() => {
-      closeModal('upload');
-      alert('✅ File downloaded!\n\n📤 Upload "dashboard-data.json" to GitHub repo root.');
-    }, 500);
+    // Save to backend
+    try {
+      const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          action: 'saveData',
+          clientData: clientData,
+          ftData: ftData
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        btn.textContent = '✅ Saved to Server!';
+        setTimeout(() => {
+          closeModal('upload');
+          alert('✅ Data saved successfully!\n\nEveryone can now see the updated data.');
+        }, 500);
+      } else {
+        throw new Error(result.error || 'Save failed');
+      }
+    } catch(saveError) {
+      console.error('Save error:', saveError);
+      btn.textContent = '⚠️ Save Failed';
+      alert('⚠️ Could not save to server.\n\nError: ' + saveError.message + '\n\nPlease try again or contact support.');
+      btn.disabled = false;
+    }
     
   } catch(error) {
     alert('Error: ' + error.message);
