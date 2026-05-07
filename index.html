@@ -298,6 +298,24 @@ window.addEventListener('DOMContentLoaded', function() {
       console.log('  Client records:', clientData.length);
       console.log('  FT records:', ftData.length);
       
+      // Regenerate all reports from saved data
+      setTimeout(async () => {
+        try {
+          console.log('Regenerating reports from saved data...');
+          generateUnitReport();
+          generateGLReport();
+          generateModeReport();
+          generateMOMReport();
+          generateVolumeReport();
+          generateUserReport();
+          generateAgeReport();
+          generateDIYReport();
+          console.log('✓ All reports regenerated');
+        } catch(e) {
+          console.error('Error regenerating reports:', e);
+        }
+      }, 100);
+      
       // Show success message
       const msg = document.createElement('div');
       msg.style.cssText = 'position:fixed;top:20px;right:20px;background:#10b981;color:#fff;padding:15px 25px;border-radius:8px;z-index:99999;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
