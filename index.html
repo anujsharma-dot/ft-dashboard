@@ -301,14 +301,13 @@ let reportsGenerated = false;
 // BACKEND CONFIGURATION
 // Replace this with your Google Apps Script Web App URL
 // CONFIGURATION - Update this with your GitHub username and repo
-const GITHUB_USER = 'anujsharma-dot';  // Your GitHub username
-const GITHUB_REPO = 'ft-dashboard';     // Your repo name
-const GITHUB_BRANCH = 'main';           // Usually 'main' or 'master'
+const GITHUB_USER = 'anujsharma-dot';
+const GITHUB_REPO = 'ft-dashboard';
+const GITHUB_BRANCH = 'main';
 const DATA_FILE_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}/dashboard-data.json`;
 
 
-// Auto-load data from backend on page load (DISABLED FOR LOCAL TESTING)
-/*
+// Auto-load data from backend on page load
 window.addEventListener('DOMContentLoaded', async function() {
   console.log('=== PAGE LOADED ===');
   
