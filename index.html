@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 
 <html lang="en">
 <head>
@@ -292,10 +292,17 @@ const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw1Al3gVwLKiXt-YVWe
 // Auto-load data from backend on page load
 window.addEventListener('DOMContentLoaded', async function() {
   console.log('🔄 Checking for data on server...');
+  console.log('Backend URL:', BACKEND_URL);
   
   try {
-    const response = await fetch(BACKEND_URL + '?action=getData');
+    const response = await fetch(BACKEND_URL + '?action=getData', {
+      method: 'GET',
+      redirect: 'follow'
+    });
+    
+    console.log('Response status:', response.status);
     const result = await response.json();
+    console.log('Result:', result);
     
     if (result.success && result.clientData && result.ftData) {
       console.log('✓ Data found on server');
