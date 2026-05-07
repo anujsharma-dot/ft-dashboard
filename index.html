@@ -320,8 +320,9 @@ window.addEventListener('DOMContentLoaded', async function() {
     if (data && data.clientData && data.ftData) {
       console.log('✓ Data loaded from Firebase');
       
-      clientData = data.clientData;
-      ftData = data.ftData;
+      // Parse JSON strings
+      clientData = typeof data.clientData === 'string' ? JSON.parse(data.clientData) : data.clientData;
+      ftData = typeof data.ftData === 'string' ? JSON.parse(data.ftData) : data.ftData;
       
       // Process data
       const BATCH_SIZE = 250;
@@ -681,10 +682,10 @@ document.getElementById('processBtn').addEventListener('click', async function()
     reportsGenerated = true;
     btn.textContent = '⏳ Saving to cloud...';
     
-    // Save to Firebase
+    // Save to Firebase (as JSON string to avoid key restrictions)
     const dataToSave = {
-      clientData: clientData,
-      ftData: ftData,
+      clientData: JSON.stringify(clientData),
+      ftData: JSON.stringify(ftData),
       lastUpdated: new Date().toISOString()
     };
     
