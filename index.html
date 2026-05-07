@@ -141,6 +141,12 @@ tr.sub td{color:#7b61ff}
 }
 </style>
 
+<!-- Firebase SDK -->
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
 </head>
 <body>
 <div class="container">
@@ -285,6 +291,86 @@ let clientData = [];
 let ftData = [];
 let charts = {};
 let reportsGenerated = false;
+
+
+// FIREBASE CONFIGURATION
+const firebaseConfig = {
+  apiKey: "AIzaSyB73XgwtjPNoruMpWtMzgSNgTyAehwyAvA",
+  authDomain: "ft-dashboard-9294e.firebaseapp.com",
+  databaseURL: "https://ft-dashboard-9294e-default-rtdb.firebaseio.com",
+  projectId: "ft-dashboard-9294e",
+  storageBucket: "ft-dashboard-9294e.firebasestorage.app",
+  messagingSenderId: "101812070005",
+  appId: "1:101812070005:web:44b5143145f71c61c5fa3c",
+  measurementId: "G-75PH7ZHWD5"
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+
+// Auto-load data from Firebase on page load
+window.addEventListener('DOMContentLoaded', async function() {
+  console.log('🔄 Loading data from Firebase...');
+  
+  try {
+    const snapshot = await database.ref('dashboard-data').once('value');
+    const data = snapshot.val();
+    
+    if (data && data.clientData && data.ftData) {
+      console.log('✓ Data loaded from Firebase');
+      
+      clientData = data.clientData;
+      ftData = data.ftData;
+      
+      // Process data
+      const BATCH_SIZE = 250;
+      for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
+        const end = Math.min(i + BATCH_SIZE, ftData.length);
+        for (let j = i; j < end; j++) {
+          const row = ftData[j];
+          const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
+          if (client) {
+            row['GL Name'] = client['GL Name'];
+            row['TL Name'] = client['TL Name'];
+            row['Age'] = client['Age'];
+            row['State'] = client['State'];
+            row['IS DIY'] = client['IS DIY'];
+          }
+          row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
+          row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
+      
+      // Generate reports
+      generateUnitReport();
+      generateGLReport();
+      generateModeReport();
+      generateMOMReport();
+      generateVolumeReport();
+      generateUserReport();
+      generateAgeReport();
+      generateDIYReport();
+      
+      reportsGenerated = true;
+      console.log('✅ Dashboard ready!');
+      
+      // Show success message
+      const msg = document.createElement('div');
+      msg.style.cssText = 'position:fixed;top:20px;right:20px;background:#10b981;color:#fff;padding:15px 25px;border-radius:8px;z-index:99999;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+      msg.textContent = '✓ Dashboard loaded! Updated: ' + new Date(data.lastUpdated).toLocaleString();
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 5000);
+      
+    } else {
+      console.log('ℹ No data in Firebase yet');
+    }
+  } catch(error) {
+    console.log('ℹ Waiting for first upload:', error);
+  }
+});
+
 
 
 // GITHUB CONFIGURATION
@@ -562,7 +648,7 @@ document.getElementById('processBtn').addEventListener('click', async function()
   btn.textContent = '⏳ Processing...';
   
   try {
-    // Process data in batches
+    // Process data
     const BATCH_SIZE = 250;
     for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
       const end = Math.min(i + BATCH_SIZE, ftData.length);
@@ -593,36 +679,29 @@ document.getElementById('processBtn').addEventListener('click', async function()
     generateDIYReport();
     
     reportsGenerated = true;
+    btn.textContent = '⏳ Saving to cloud...';
     
-    // Auto-download JSON
+    // Save to Firebase
     const dataToSave = {
       clientData: clientData,
       ftData: ftData,
       lastUpdated: new Date().toISOString()
     };
     
-    const blob = new Blob([JSON.stringify(dataToSave)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'dashboard-data.json';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    await database.ref('dashboard-data').set(dataToSave);
     
-    btn.textContent = '✅ Complete - Check Downloads!';
+    btn.textContent = '✅ Saved to Cloud!';
     
     setTimeout(() => {
       closeModal('upload');
-      alert('✅ File downloaded!\n\n📤 Upload "dashboard-data.json" to GitHub repo root.');
+      alert('✅ Data saved successfully!\n\nEveryone can now see the updated data.');
     }, 500);
     
   } catch(error) {
+    console.error('Error:', error);
+    btn.textContent = '❌ Error - Try Again';
     alert('Error: ' + error.message);
     btn.disabled = false;
-    btn.textContent = '⚡ Process Data & Generate Reports';
   }
 });
 
