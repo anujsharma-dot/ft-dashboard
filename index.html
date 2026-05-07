@@ -237,6 +237,8 @@ tr.sub td{color:#2563eb}
 
 <button class="btn" id="processBtn" disabled>⚡ Process Data & Generate Reports</button>
 
+<button class="btn" onclick="clearStoredData()" style="background:#ef4444;margin-top:10px">🗑️ Clear Stored Data</button>
+
 <div class="progress" id="progress">
   <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
   <p class="progress-text" id="progressText"></p>
@@ -280,6 +282,47 @@ let ftData = [];
 let charts = {};
 let reportsGenerated = false;
 
+// Load data from localStorage on page load
+window.addEventListener('DOMContentLoaded', function() {
+  try {
+    const savedClientData = localStorage.getItem('ftDashboard_clientData');
+    const savedFtData = localStorage.getItem('ftDashboard_ftData');
+    const savedReportsGenerated = localStorage.getItem('ftDashboard_reportsGenerated');
+    
+    if (savedClientData && savedFtData && savedReportsGenerated === 'true') {
+      clientData = JSON.parse(savedClientData);
+      ftData = JSON.parse(savedFtData);
+      reportsGenerated = true;
+      
+      console.log('✓ Data loaded from localStorage');
+      console.log('  Client records:', clientData.length);
+      console.log('  FT records:', ftData.length);
+      
+      // Show success message
+      const msg = document.createElement('div');
+      msg.style.cssText = 'position:fixed;top:20px;right:20px;background:#10b981;color:#fff;padding:15px 25px;border-radius:8px;z-index:99999;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+      msg.textContent = '✓ Data loaded from previous session';
+      document.body.appendChild(msg);
+      setTimeout(() => msg.remove(), 3000);
+    }
+  } catch(e) {
+    console.warn('Could not load from localStorage:', e);
+  }
+});
+
+
+function clearStoredData() {
+  if (confirm('Are you sure you want to clear all stored data? You will need to re-upload files.')) {
+    localStorage.removeItem('ftDashboard_clientData');
+    localStorage.removeItem('ftDashboard_ftData');
+    localStorage.removeItem('ftDashboard_reportsGenerated');
+    clientData = [];
+    ftData = [];
+    reportsGenerated = false;
+    alert('✓ Data cleared! Please refresh the page.');
+    location.reload();
+  }
+}
 function openAdminUpload() {
   document.getElementById('passwordOverlay').style.display = 'flex';
   setTimeout(() => document.getElementById('passwordInput').focus(), 100);
