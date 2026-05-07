@@ -324,6 +324,19 @@ window.addEventListener('DOMContentLoaded', async function() {
       clientData = typeof data.clientData === 'string' ? JSON.parse(data.clientData) : data.clientData;
       ftData = typeof data.ftData === 'string' ? JSON.parse(data.ftData) : data.ftData;
       
+      console.log('📊 Data loaded:', {
+        clientRecords: clientData.length,
+        ftRecords: ftData.length
+      });
+      
+      // Check sample data
+      if (clientData.length > 0) {
+        console.log('Sample client:', clientData[0]);
+      }
+      if (ftData.length > 0) {
+        console.log('Sample FT (before mapping):', ftData[0]);
+      }
+      
       // Process data
       const BATCH_SIZE = 250;
       for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
@@ -355,6 +368,19 @@ window.addEventListener('DOMContentLoaded', async function() {
       generateDIYReport();
       
       reportsGenerated = true;
+      
+      // Check mapping worked
+      const mappedCount = ftData.filter(row => row['GL Name']).length;
+      console.log('📊 Mapping results:', {
+        totalFTs: ftData.length,
+        withGLName: mappedCount,
+        mappingRate: ((mappedCount / ftData.length) * 100).toFixed(1) + '%'
+      });
+      
+      if (ftData.length > 0) {
+        console.log('Sample FT (after mapping):', ftData[0]);
+      }
+      
       console.log('✅ Dashboard ready!');
       
       // Show success message
@@ -426,6 +452,19 @@ window.addEventListener('DOMContentLoaded', async function() {
       generateDIYReport();
       
       reportsGenerated = true;
+      
+      // Check mapping worked
+      const mappedCount = ftData.filter(row => row['GL Name']).length;
+      console.log('📊 Mapping results:', {
+        totalFTs: ftData.length,
+        withGLName: mappedCount,
+        mappingRate: ((mappedCount / ftData.length) * 100).toFixed(1) + '%'
+      });
+      
+      if (ftData.length > 0) {
+        console.log('Sample FT (after mapping):', ftData[0]);
+      }
+      
       console.log('✅ Dashboard ready!');
       
     } else {
