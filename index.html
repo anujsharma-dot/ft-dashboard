@@ -17,7 +17,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .header{text-align:center;margin-bottom:40px}
 .header h1{color:#4fffb0;font-size:42px;font-weight:800;margin-bottom:10px}
 .header p{color:#7a97b8;font-size:16px}
-.dashboard-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:25px;margin-bottom:30px;align-items:start}
+.dashboard-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin-bottom:30px;align-items:start}
 .dashboard-card{width:100%;max-width:100%}
 @media(max-width:1200px){.dashboard-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:768px){.dashboard-grid{grid-template-columns:1fr}}
@@ -38,9 +38,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .dashboard-card:hover::before{transform:scaleX(1)}
 .dashboard-card.locked{cursor:not-allowed;opacity:0.6}
 .dashboard-card.locked:hover{transform:none;border-color:#2a2f3e}
-.card-icon{font-size:48px;margin-bottom:15px;display:block}
+.card-icon{font-size:36px;margin-bottom:15px;display:block}
 .card-title{font-size:22px;font-weight:700;color:#4fffb0;margin-bottom:8px}
-.card-desc{font-size:14px;color:#7a97b8;line-height:1.6}
+.card-desc{font-size:13px;color:#7a97b8;line-height:1.6}
 .lock-badge{position:absolute;top:15px;right:15px;background:#ff6b6b;color:#fff;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}
 .modal{display:none;position:fixed;inset:0;background:rgba(10,14,26,0.95);z-index:9999;align-items:center;justify-content:center}
 .modal.show{display:flex}
@@ -134,8 +134,9 @@ tr.sub td{color:#7b61ff}
 @media(max-width:1200px){.charts{grid-template-columns:1fr}.chart-box.wide{grid-column:span 1}}
 @media(max-width:768px){.upload-section{grid-template-columns:1fr}}
 
-/* Hide all filter UI elements */
-.filter-section, .filter-grid, .filter-group, .filter-box, .filter-actions {
+/* HIDE ALL FILTER UI */
+.filter-section, .filter-grid, .filter-group, .filter-box, 
+.filter-actions, .filter-label, .filter-checkbox-group {
   display: none !important;
 }
 </style>
@@ -279,16 +280,75 @@ tr.sub td{color:#7b61ff}
 <div id="diyReport" style="display:none"></div>
 
 <script>
-
-const GITHUB_USER = 'anujsharma-dot';
-const GITHUB_REPO = 'ft-dashboard';
-const GITHUB_BRANCH = 'main';
-const DATA_FILE_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}/dashboard-data.json`;
 const CORRECT_PASSWORD = 'Megha@7890';
 let clientData = [];
 let ftData = [];
 let charts = {};
 let reportsGenerated = false;
+
+
+// GITHUB CONFIGURATION
+const GITHUB_USER = 'anujsharma-dot';
+const GITHUB_REPO = 'ft-dashboard';
+const GITHUB_BRANCH = 'main';
+const DATA_FILE_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}/dashboard-data.json`;
+
+// AUTO-LOAD FROM GITHUB ON PAGE LOAD
+window.addEventListener('DOMContentLoaded', async function() {
+  console.log('🔄 Checking for data on GitHub...');
+  
+  try {
+    const response = await fetch(DATA_FILE_URL + '?t=' + Date.now());
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✓ Data loaded from GitHub');
+      
+      // Load data
+      clientData = data.clientData;
+      ftData = data.ftData;
+      
+      // Process data
+      const BATCH_SIZE = 250;
+      for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
+        const end = Math.min(i + BATCH_SIZE, ftData.length);
+        for (let j = i; j < end; j++) {
+          const row = ftData[j];
+          const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
+          if (client) {
+            row['GL Name'] = client['GL Name'];
+            row['TL Name'] = client['TL Name'];
+            row['Age'] = client['Age'];
+            row['State'] = client['State'];
+            row['IS DIY'] = client['IS DIY'];
+          }
+          row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
+          row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
+      
+      // Generate all reports
+      generateUnitReport();
+      generateGLReport();
+      generateModeReport();
+      generateMOMReport();
+      generateVolumeReport();
+      generateUserReport();
+      generateAgeReport();
+      generateDIYReport();
+      
+      reportsGenerated = true;
+      console.log('✅ Dashboard ready!');
+      
+    } else {
+      console.log('ℹ No data file on GitHub yet');
+    }
+  } catch(error) {
+    console.log('ℹ Waiting for first data upload');
+  }
+});
+
 
 function openAdminUpload() {
   document.getElementById('passwordOverlay').style.display = 'flex';
@@ -500,23 +560,12 @@ document.getElementById('processBtn').addEventListener('click', async function()
   const btn = this;
   btn.disabled = true;
   btn.textContent = '⏳ Processing...';
-  document.getElementById('log').innerHTML = '';
   
   try {
-    log('Starting data processing...', 'success');
-    setProgress(5, 'Preparing data...');
-    await sleep(100);
-    
-    // BATCH PROCESSING - Prevents freezing on large files
-    const totalRows = ftData.length;
+    // Process data in batches
     const BATCH_SIZE = 250;
-    
-    log(`Processing ${totalRows.toLocaleString()} records in batches of ${BATCH_SIZE}...`);
-    setProgress(15, 'Starting batch processing...');
-    
-    for (let i = 0; i < totalRows; i += BATCH_SIZE) {
-      const end = Math.min(i + BATCH_SIZE, totalRows);
-      
+    for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
+      const end = Math.min(i + BATCH_SIZE, ftData.length);
       for (let j = i; j < end; j++) {
         const row = ftData[j];
         const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
@@ -525,39 +574,53 @@ document.getElementById('processBtn').addEventListener('click', async function()
           row['TL Name'] = client['TL Name'];
           row['Age'] = client['Age'];
           row['State'] = client['State'];
+          row['IS DIY'] = client['IS DIY'];
         }
         row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
         row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
       }
-      
-      // Update progress
-      const pct = 15 + Math.floor((end / totalRows) * 25);
-      setProgress(pct, `Processed: ${end.toLocaleString()} / ${totalRows.toLocaleString()} rows`);
-      
-      // CRITICAL: Yield to browser
-      await sleep(1);
+      await new Promise(resolve => setTimeout(resolve, 1));
     }
-
     
-    log('✅ Processed ' + ftData.length + ' records');
-    setProgress(40, 'Generating reports...');
-    await sleep(50);
-    
-    generateAllReports();
-    
-    setProgress(100, '✅ Complete!');
-    log('🎉 All reports generated!', 'success');
+    // Generate reports
+    generateUnitReport();
+    generateGLReport();
+    generateModeReport();
+    generateMOMReport();
+    generateVolumeReport();
+    generateUserReport();
+    generateAgeReport();
+    generateDIYReport();
     
     reportsGenerated = true;
-    btn.textContent = '✅ Processing Complete - Close to view dashboards';
+    
+    // Auto-download JSON
+    const dataToSave = {
+      clientData: clientData,
+      ftData: ftData,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    const blob = new Blob([JSON.stringify(dataToSave)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'dashboard-data.json';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    btn.textContent = '✅ Complete - Check Downloads!';
     
     setTimeout(() => {
       closeModal('upload');
-      alert('✅ Reports generated! Click on any dashboard card to view.');
-    }, 1500);
-  } catch (err) {
-    log('❌ ERROR: ' + err.message);
-    console.error(err);
+      alert('✅ File downloaded!\n\n📤 Upload "dashboard-data.json" to GitHub repo root.');
+    }, 500);
+    
+  } catch(error) {
+    alert('Error: ' + error.message);
     btn.disabled = false;
     btn.textContent = '⚡ Process Data & Generate Reports';
   }
