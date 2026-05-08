@@ -354,7 +354,7 @@ window.addEventListener('DOMContentLoaded', async function() {
           row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
           row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
         }
-        await new Promise(resolve => setTimeout(resolve, 1));
+        // No sleep needed - fast enough!
       }
       
       // Generate reports
@@ -368,6 +368,20 @@ window.addEventListener('DOMContentLoaded', async function() {
       generateDIYReport();
       
       reportsGenerated = true;
+      
+      // Display last updated date
+      if (data.lastUpdated) {
+        const date = new Date(data.lastUpdated);
+        const formattedDate = date.toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+        document.getElementById('lastUpdatedDisplay').textContent = '📅 Last Updated: ' + formattedDate;
+      }
       
       // Check mapping worked
       const mappedCount = ftData.filter(row => row['GL Name']).length;
@@ -438,7 +452,7 @@ window.addEventListener('DOMContentLoaded', async function() {
           row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
           row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
         }
-        await new Promise(resolve => setTimeout(resolve, 1));
+        // No sleep needed - fast enough!
       }
       
       // Generate all reports
@@ -452,6 +466,20 @@ window.addEventListener('DOMContentLoaded', async function() {
       generateDIYReport();
       
       reportsGenerated = true;
+      
+      // Display last updated date
+      if (data.lastUpdated) {
+        const date = new Date(data.lastUpdated);
+        const formattedDate = date.toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+        document.getElementById('lastUpdatedDisplay').textContent = '📅 Last Updated: ' + formattedDate;
+      }
       
       // Check mapping worked
       const mappedCount = ftData.filter(row => row['GL Name']).length;
@@ -705,7 +733,7 @@ document.getElementById('processBtn').addEventListener('click', async function()
         row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
         row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
       }
-      await new Promise(resolve => setTimeout(resolve, 1));
+      // No sleep needed - fast enough!
     }
     
     // Generate reports
@@ -905,104 +933,180 @@ function generateUnitReport() {
 }
 
 function generateGLReport() {
-  const glData = {};
-  const tlData = {};
+  const container = document.getElementById('glReport');
+  if (!container) return;
   
-  ftData.forEach(row => {
-    const gl = row['GL Name'] || 'Unassigned';
-    const tl = row['TL Name'] || 'Unassigned';
-    
-    if (!glData[gl]) glData[gl] = {total: 0, tls: {}};
-    glData[gl].total++;
-    if (!glData[gl].tls[tl]) glData[gl].tls[tl] = 0;
-    glData[gl].tls[tl]++;
-    
-    if (!tlData[tl]) tlData[tl] = 0;
-    tlData[tl]++;
+  // Get all unique dates from FT data and sort them
+  const allDates = [...new Set(ftData.map(row => {
+    const ftDate = row['FT Date'];
+    if (!ftDate) return null;
+    try {
+      const date = new Date(ftDate);
+      if (isNaN(date)) return null;
+      return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    } catch(e) {
+      return null;
+    }
+  }).filter(d => d))].sort((a, b) => {
+    const parseDate = (str) => {
+      const [day, month] = str.split(' ');
+      const monthMap = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+      return new Date(2026, monthMap[month], parseInt(day));
+    };
+    return parseDate(a) - parseDate(b);
   });
   
+  console.log('📅 Unique dates:', allDates);
+  
+  // Group by GL Name
+  const glGroups = {};
+  ftData.forEach(row => {
+    const glName = row['GL Name'] || 'Unassigned';
+    const tlName = row['TL Name'] || 'Unassigned';
+    const ftDate = row['FT Date'];
+    
+    if (!ftDate) return;
+    
+    let formattedDate;
+    try {
+      const date = new Date(ftDate);
+      if (isNaN(date)) return;
+      formattedDate = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    } catch(e) {
+      return;
+    }
+    
+    if (!glGroups[glName]) {
+      glGroups[glName] = {};
+    }
+    
+    if (!glGroups[glName][tlName]) {
+      glGroups[glName][tlName] = {};
+      allDates.forEach(date => {
+        glGroups[glName][tlName][date] = 0;
+      });
+    }
+    
+    if (glGroups[glName][tlName][formattedDate] !== undefined) {
+      glGroups[glName][tlName][formattedDate]++;
+    }
+  });
+  
+  // Build HTML
   let html = '<button class="export-btn" onclick="exportToExcel(\'gl\')">📥 Export to Excel</button>';
   
-  html += '<div class="insights">';
-  const topGL = Object.keys(glData).reduce((a, b) => glData[a].total > glData[b].total ? a : b);
-  html += '<div class="insight"><p><strong>Top GL:</strong> ' + topGL + ' leading with ' + glData[topGL].total.toLocaleString() + ' FTs (' + ((glData[topGL].total/ftData.length)*100).toFixed(1) + '% of total)</p></div>';
+  // Sort GLs by total count
+  const glArray = Object.keys(glGroups).map(glName => {
+    const tlData = glGroups[glName];
+    const glTotal = Object.values(tlData).reduce((sum, tlDates) => {
+      return sum + Object.values(tlDates).reduce((s, count) => s + count, 0);
+    }, 0);
+    return { glName, tlData, glTotal };
+  }).sort((a, b) => b.glTotal - a.glTotal);
   
-  const topTL = Object.keys(tlData).reduce((a, b) => tlData[a] > tlData[b] ? a : b);
-  html += '<div class="insight"><p><strong>Top TL:</strong> ' + topTL + ' with ' + tlData[topTL].toLocaleString() + ' FTs - strongest individual contributor</p></div>';
-  
-  html += '<div class="insight"><p><strong>Hierarchy depth:</strong> ' + Object.keys(glData).length + ' GLs managing ' + Object.keys(tlData).length + ' TLs (avg ' + (Object.keys(tlData).length/Object.keys(glData).length).toFixed(1) + ' TLs per GL)</p></div>';
-  
-  const avgPerGL = (ftData.length/Object.keys(glData).length).toFixed(1);
-  const avgPerTL = (ftData.length/Object.keys(tlData).length).toFixed(1);
-  html += '<div class="insight"><p><strong>Average performance:</strong> ' + avgPerGL + ' FTs per GL, ' + avgPerTL + ' FTs per TL</p></div>';
-  html += '</div>';
-  
-  html += '<div class="charts">';
-  html += '<div class="chart-box"><div class="chart-title">Top 10 GLs Performance</div><canvas id="glChart1"></canvas></div>';
-  html += '<div class="chart-box"><div class="chart-title">Top 10 TLs Performance</div><canvas id="glChart2"></canvas></div>';
-  html += '</div>';
-  
-  html += '<div class="table-section"><h2>GL & TL Performance Details</h2>';
-  Object.keys(glData).sort((a, b) => glData[b].total - glData[a].total).forEach(gl => {
-    html += '<h3>' + gl + ' - Total: ' + glData[gl].total + ' FTs</h3><div class="table-container"><table><thead><tr><th>TL Name</th><th>FT Count</th></tr></thead><tbody>';
-    Object.keys(glData[gl].tls).sort((a, b) => glData[gl].tls[b] - glData[gl].tls[a]).forEach(tl => {
-      html += '<tr><td>' + tl + '</td><td>' + glData[gl].tls[tl] + '</td></tr>';
+  // Calculate grand totals by date
+  const grandTotalsByDate = {};
+  allDates.forEach(date => {
+    grandTotalsByDate[date] = 0;
+    glArray.forEach(gl => {
+      Object.values(gl.tlData).forEach(tlDates => {
+        grandTotalsByDate[date] += tlDates[date] || 0;
+      });
     });
-    html += '<tr class="sub"><td>GL Total</td><td>' + glData[gl].total + '</td></tr></tbody></table></div>';
   });
-  html += '</div>';
   
-  document.getElementById('glReport').innerHTML = html;
+  const grandTotal = Object.values(grandTotalsByDate).reduce((sum, count) => sum + count, 0);
   
-  chartData.gl = {glData, tlData};
-  
-  setTimeout(() => {
-    const top10GLs = Object.keys(glData).sort((a,b) => glData[b].total - glData[a].total).slice(0,10);
-    if (charts.glChart1) charts.glChart1.destroy();
-    charts.glChart1 = new Chart(document.getElementById('glChart1'), {
-      type: 'bar',
-      data: {
-        labels: top10GLs,
-        datasets: [{
-          label: 'FT Count',
-          data: top10GLs.map(gl => glData[gl].total),
-          backgroundColor: 'rgba(123,97,255,0.8)'
-        }]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        plugins: {legend: {labels: {color: '#e0e0e0'}}},
-        scales: {
-          y: {ticks: {color: '#7a97b8'}, grid: {color: '#2a2f3e'}},
-          x: {ticks: {color: '#7a97b8'}, grid: {color: '#2a2f3e'}}
-        }
-      }
+  // Display each GL
+  glArray.forEach(({ glName, tlData, glTotal }) => {
+    html += `
+      <div class="table-section">
+        <h3 style="color: #4fffb0; font-size: 20px; margin-bottom: 20px;">
+          ${glName} - Total: ${glTotal} FTs
+        </h3>
+        
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align: left;">TL Name</th>
+                ${allDates.map(date => `<th>${date}</th>`).join('')}
+                <th style="background: #1a1f2e; color: #7b61ff;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+    `;
+    
+    // Sort TLs by total
+    const tlArray = Object.keys(tlData).map(tlName => {
+      const dates = tlData[tlName];
+      const tlTotal = Object.values(dates).reduce((sum, count) => sum + count, 0);
+      return { tlName, dates, tlTotal };
+    }).sort((a, b) => b.tlTotal - a.tlTotal);
+    
+    // Display each TL
+    tlArray.forEach(({ tlName, dates, tlTotal }) => {
+      html += `
+        <tr>
+          <td style="text-align: left; font-weight: 600;">${tlName}</td>
+          ${allDates.map(date => `<td>${dates[date] || 0}</td>`).join('')}
+          <td style="font-weight: 700; color: #7b61ff;">${tlTotal}</td>
+        </tr>
+      `;
     });
     
-    const top10TLs = Object.keys(tlData).sort((a,b) => tlData[b] - tlData[a]).slice(0,10);
-    if (charts.glChart2) charts.glChart2.destroy();
-    charts.glChart2 = new Chart(document.getElementById('glChart2'), {
-      type: 'bar',
-      data: {
-        labels: top10TLs,
-        datasets: [{
-          label: 'FT Count',
-          data: top10TLs.map(tl => tlData[tl]),
-          backgroundColor: 'rgba(79,255,176,0.8)'
-        }]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        plugins: {legend: {labels: {color: '#e0e0e0'}}},
-        scales: {
-          y: {ticks: {color: '#7a97b8'}, grid: {color: '#2a2f3e'}},
-          x: {ticks: {color: '#7a97b8'}, grid: {color: '#2a2f3e'}}
-        }
-      }
+    // GL Total row
+    const glTotalsByDate = {};
+    allDates.forEach(date => {
+      glTotalsByDate[date] = Object.values(tlData).reduce((sum, tlDates) => sum + (tlDates[date] || 0), 0);
     });
-  }, 100);
+    
+    html += `
+      <tr class="total">
+        <td style="text-align: left;">GL Total</td>
+        ${allDates.map(date => `<td>${glTotalsByDate[date]}</td>`).join('')}
+        <td>${glTotal}</td>
+      </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  });
+  
+  // Add grand total section
+  html += `
+    <div class="table-section" style="margin-top: 30px;">
+      <h3 style="color: #7b61ff; font-size: 22px; margin-bottom: 20px;">
+        📊 Grand Total: ${grandTotal} FTs
+      </h3>
+      
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align: left;">Date</th>
+              <th>FT Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allDates.map(date => `
+              <tr>
+                <td style="text-align: left; font-weight: 600;">${date}</td>
+                <td style="font-weight: 700; color: #4fffb0;">${grandTotalsByDate[date]}</td>
+              </tr>
+            `).join('')}
+            <tr class="total">
+              <td style="text-align: left;">Total</td>
+              <td>${grandTotal}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  
+  container.innerHTML = html;
 }
 
 function generateModeReport() {
