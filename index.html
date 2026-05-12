@@ -753,10 +753,14 @@ document.getElementById('processBtn').addEventListener('click', async function()
     const dataToSave = {
       clientData: JSON.stringify(clientData),
       ftData: JSON.stringify(ftData),
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
+      secret: 'Megha7890Upload'  // Security key (remove after successful write)
     };
     
     await database.ref('dashboard-data').set(dataToSave);
+    
+    // Remove secret after write
+    await database.ref('dashboard-data/secret').remove();
     
     btn.textContent = '✅ Saved to Cloud!';
     
