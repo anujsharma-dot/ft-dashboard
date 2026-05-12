@@ -1850,52 +1850,49 @@ function generateDIYReport() {
   const allDates = [...new Set(ftData.map(r => formatDateKey(r['First Trade Date New'])).filter(Boolean))];
   const dates = sortDates(allDates);
   
-  // Count FTs from DIY vs Non-DIY (already mapped in ftData!)
+  // Count FTs from DIY vs Non-DIY (ONLY from May client master - exclude Unknown)
   const diyFTs = ftData.filter(row => row['IS DIY'] === 'Y').length;
   const nonDIYFTs = ftData.filter(row => row['IS DIY'] === 'N').length;
-  const unknownFTs = ftData.filter(row => row['IS DIY'] === 'Unknown' || !row['IS DIY']).length;
-  const totalFTs = ftData.length;
+  const totalFTs = diyFTs + nonDIYFTs; // Only count Y and N, not Unknown
   
-  // Date-wise breakdown
+  // Date-wise breakdown (exclude Unknown)
   const dateData = {};
   dates.forEach(date => {
-    dateData[date] = {DIY: 0, 'Non-DIY': 0, Unknown: 0};
+    dateData[date] = {DIY: 0, 'Non-DIY': 0};
     
     ftData.filter(r => formatDateKey(r['First Trade Date New']) === date).forEach(row => {
       if (row['IS DIY'] === 'Y') {
         dateData[date].DIY++;
       } else if (row['IS DIY'] === 'N') {
         dateData[date]['Non-DIY']++;
-      } else {
-        dateData[date].Unknown++;
       }
+      // Ignore Unknown
     });
   });
   
-  // Unit-wise breakdown
+  // Unit-wise breakdown (exclude Unknown)
   const unitData = {};
   units.forEach(unit => {
     const unitFTs = ftData.filter(r => r['Unit Name'] === unit);
-    unitData[unit] = {DIY: 0, 'Non-DIY': 0, Unknown: 0};
+    unitData[unit] = {DIY: 0, 'Non-DIY': 0};
     
     unitFTs.forEach(row => {
       if (row['IS DIY'] === 'Y') {
         unitData[unit].DIY++;
       } else if (row['IS DIY'] === 'N') {
         unitData[unit]['Non-DIY']++;
-      } else {
-        unitData[unit].Unknown++;
       }
+      // Ignore Unknown
     });
   });
   
   let html = '<button class="export-btn" onclick="exportToExcel(\'diy\')">📥 Export to Excel</button>';
   
   html += '<div class="insights">';
-  html += '<div class="insight"><p><strong>DIY FTs:</strong> ' + diyFTs.toLocaleString() + ' (' + ((diyFTs/totalFTs)*100).toFixed(1) + '% of total FTs)</p></div>';
-  html += '<div class="insight"><p><strong>Non-DIY FTs:</strong> ' + nonDIYFTs.toLocaleString() + ' (' + ((nonDIYFTs/totalFTs)*100).toFixed(1) + '% of total FTs)</p></div>';
-  html += '<div class="insight"><p><strong>Unknown FTs:</strong> ' + unknownFTs.toLocaleString() + ' (' + ((unknownFTs/totalFTs)*100).toFixed(1) + '% - not in May client master)</p></div>';
-  html += '<div class="insight"><p><strong>Total FTs:</strong> ' + totalFTs.toLocaleString() + ' across all categories</p></div>';
+  html += '<div class="insight"><p><strong>DIY FTs:</strong> ' + diyFTs.toLocaleString() + ' (' + ((diyFTs/totalFTs)*100).toFixed(1) + '% of May activations)</p></div>';
+  html += '<div class="insight"><p><strong>Non-DIY FTs:</strong> ' + nonDIYFTs.toLocaleString() + ' (' + ((nonDIYFTs/totalFTs)*100).toFixed(1) + '% of May activations)</p></div>';
+  html += '<div class="insight"><p><strong>Total May FTs:</strong> ' + totalFTs.toLocaleString() + ' from May 2026 activated clients only</p></div>';
+  html += '<div class="insight"><p><strong>Note:</strong> This report shows only May 2026 activations (clients in current month master file)</p></div>';
   html += '</div>';
   
   html += '<div class="charts">';
@@ -1904,16 +1901,12 @@ function generateDIYReport() {
   html += '<div class="chart-box wide"><div class="chart-title">Daily Trend - DIY vs Non-DIY</div><canvas id="diyChart3"></canvas></div>';
   html += '</div>';
   
-  html += '<div class="table-section"><h2>Overall Summary</h2><div class="table-container"><table><thead><tr><th>Type</th><th>Accounts</th><th>% of Accounts</th><th>FTs Generated</th><th>% of FTs</th><th>FT per Account</th><th>Conversion %</th></tr></thead><tbody>';
-  html += '<tr><td>DIY</td><td>' + diyAccounts.toLocaleString() + '</td><td>' + ((diyAccounts/totalAccounts)*100).toFixed(1) + '%</td><td>' + diyFTs.toLocaleString() + '</td><td>' + ((diyFTs/totalFTs)*100).toFixed(1) + '%</td><td>' + (diyFTs/diyAccounts).toFixed(2) + '</td><td>' + diyConversion + '%</td></tr>';
-  html += '<tr><td>Non-DIY</td><td>' + nonDIYAccounts.toLocaleString() + '</td><td>' + ((nonDIYAccounts/totalAccounts)*100).toFixed(1) + '%</td><td>' + nonDIYFTs.toLocaleString() + '</td><td>' + ((nonDIYFTs/totalFTs)*100).toFixed(1) + '%</td><td>' + (nonDIYFTs/nonDIYAccounts).toFixed(2) + '</td><td>' + nonDIYConversion + '%</td></tr>';
-  html += '<tr class="total"><td>TOTAL</td><td>' + totalAccounts.toLocaleString() + '</td><td>100%</td><td>' + totalFTs.toLocaleString() + '</td><td>100%</td><td>' + (totalFTs/totalAccounts).toFixed(2) + '</td><td>' + ((totalFTs/totalAccounts)*100).toFixed(2) + '%</td></tr>';
-  html += '</tbody></table></div></div>';
-  
-  html += '<div class="table-section"><h2>Unit-wise DIY vs Non-DIY</h2><div class="table-container"><table><thead><tr><th>Unit</th><th>DIY FTs</th><th>Non-DIY FTs</th><th>Total FTs</th><th>DIY %</th></tr></thead><tbody>';
+  html += '<div class="table-section"><h2>Unit-wise DIY vs Non-DIY (May Activations Only)</h2><div class="table-container"><table><thead><tr><th>Unit</th><th>DIY FTs</th><th>Non-DIY FTs</th><th>Total FTs</th><th>DIY %</th></tr></thead><tbody>';
   units.forEach(unit => {
     const total = unitData[unit].DIY + unitData[unit]['Non-DIY'];
-    html += '<tr><td>' + unit + '</td><td>' + unitData[unit].DIY + '</td><td>' + unitData[unit]['Non-DIY'] + '</td><td>' + total + '</td><td>' + ((unitData[unit].DIY/total)*100).toFixed(1) + '%</td></tr>';
+    if (total > 0) {
+      html += '<tr><td>' + unit + '</td><td>' + unitData[unit].DIY + '</td><td>' + unitData[unit]['Non-DIY'] + '</td><td>' + total + '</td><td>' + ((unitData[unit].DIY/total)*100).toFixed(1) + '%</td></tr>';
+    }
   });
   const grandDIY = units.reduce((s, u) => s + unitData[u].DIY, 0);
   const grandNonDIY = units.reduce((s, u) => s + unitData[u]['Non-DIY'], 0);
@@ -1921,17 +1914,19 @@ function generateDIYReport() {
   html += '<tr class="total"><td>ALL UNITS</td><td>' + grandDIY + '</td><td>' + grandNonDIY + '</td><td>' + grandTotal + '</td><td>' + ((grandDIY/grandTotal)*100).toFixed(1) + '%</td></tr>';
   html += '</tbody></table></div></div>';
   
-  html += '<div class="table-section"><h2>Date-wise DIY vs Non-DIY</h2><div class="table-container"><table><thead><tr><th>FT Date</th><th>DIY FTs</th><th>Non-DIY FTs</th><th>Total</th><th>DIY %</th></tr></thead><tbody>';
+  html += '<div class="table-section"><h2>Date-wise DIY vs Non-DIY (May Activations Only)</h2><div class="table-container"><table><thead><tr><th>FT Date</th><th>DIY FTs</th><th>Non-DIY FTs</th><th>Total</th><th>DIY %</th></tr></thead><tbody>';
   dates.forEach(date => {
     const total = dateData[date].DIY + dateData[date]['Non-DIY'];
-    html += '<tr><td>' + date + '</td><td>' + dateData[date].DIY + '</td><td>' + dateData[date]['Non-DIY'] + '</td><td>' + total + '</td><td>' + ((dateData[date].DIY/total)*100).toFixed(1) + '%</td></tr>';
+    if (total > 0) {
+      html += '<tr><td>' + date + '</td><td>' + dateData[date].DIY + '</td><td>' + dateData[date]['Non-DIY'] + '</td><td>' + total + '</td><td>' + ((dateData[date].DIY/total)*100).toFixed(1) + '%</td></tr>';
+    }
   });
   html += '<tr class="total"><td>Grand Total</td><td>' + diyFTs + '</td><td>' + nonDIYFTs + '</td><td>' + totalFTs + '</td><td>' + ((diyFTs/totalFTs)*100).toFixed(1) + '%</td></tr>';
   html += '</tbody></table></div></div>';
   
   document.getElementById('diyReport').innerHTML = html;
   
-  chartData.diy = {diyAccounts, nonDIYAccounts, diyFTs, nonDIYFTs, dates, dateData};
+  chartData.diy = {diyFTs, nonDIYFTs, dates, dateData};
   
   setTimeout(() => {
     if (charts.diyChart1) charts.diyChart1.destroy();
@@ -1940,7 +1935,7 @@ function generateDIYReport() {
       data: {
         labels: ['DIY', 'Non-DIY'],
         datasets: [{
-          data: [diyAccounts, nonDIYAccounts],
+          data: [diyFTs, nonDIYFTs],
           backgroundColor: ['rgba(79,255,176,0.8)', 'rgba(123,97,255,0.8)']
         }]
       },
@@ -1998,7 +1993,7 @@ function generateDIYReport() {
 
 function renderDIYCharts() {
   if (!chartData.diy) return;
-  const {diyAccounts, nonDIYAccounts, diyFTs, nonDIYFTs, dates, dateData} = chartData.diy;
+  const {diyFTs, nonDIYFTs, dates, dateData} = chartData.diy;
   
   if (charts.diyChart1) charts.diyChart1.destroy();
   charts.diyChart1 = new Chart(document.getElementById('diyChart1'), {
@@ -2006,7 +2001,7 @@ function renderDIYCharts() {
     data: {
       labels: ['DIY', 'Non-DIY'],
       datasets: [{
-        data: [diyAccounts, nonDIYAccounts],
+        data: [diyFTs, nonDIYFTs],
         backgroundColor: ['rgba(79,255,176,0.8)', 'rgba(123,97,255,0.8)']
       }]
     },
@@ -2019,8 +2014,8 @@ function renderDIYCharts() {
     data: {
       labels: ['DIY', 'Non-DIY'],
       datasets: [{
-        data: [diyFTs, nonDIYFTs],
-        backgroundColor: ['rgba(79,255,176,0.8)', 'rgba(123,97,255,0.8)']
+        data: [diyFTs, nonDIYFTs, unknownFTs],
+        backgroundColor: ['rgba(79,255,176,0.8)', 'rgba(123,97,255,0.8)', 'rgba(255,159,64,0.8)']
       }]
     },
     options: {responsive: true, plugins: {legend: {labels: {color: '#e0e0e0'}}}}
