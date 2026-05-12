@@ -716,25 +716,111 @@ document.getElementById('processBtn').addEventListener('click', async function()
   btn.textContent = '⏳ Processing...';
   
   try {
-    // Process data
-    const BATCH_SIZE = 250;
-    for (let i = 0; i < ftData.length; i += BATCH_SIZE) {
-      const end = Math.min(i + BATCH_SIZE, ftData.length);
-      for (let j = i; j < end; j++) {
-        const row = ftData[j];
-        const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
-        if (client) {
-          row['GL Name'] = client['GL Name'];
-          row['TL Name'] = client['TL Name'];
-          row['Age'] = client['Age'];
-          row['State'] = client['State'];
-          row['IS DIY'] = client['IS DIY'];
+    // STEP 1: Create RM mapping by Emp Code (O(1) lookup)
+    console.log('🔧 Creating RM Code mapping...');
+    const rmCodeMap = new Map();
+    clientData.forEach(client => {
+      const empCode = String(client['Emp Code'] || '').trim();
+      if (empCode && empCode !== 'nan') {
+        if (!rmCodeMap.has(empCode)) {
+          rmCodeMap.set(empCode, {
+            'GL Name': client['GL Name'],
+            'TL Name': client['TL Name'],
+            'IS DIY': client['IS DIY'],
+            'Age': client['Age'],
+            'State': client['State']
+          });
         }
-        row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
-        row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
       }
-      // No sleep needed - fast enough!
-    }
+    });
+    console.log('✓ RM Code map created:', rmCodeMap.size, 'entries');
+    
+    // STEP 2: Create name mapping (First + Last) as fallback
+    console.log('🔧 Creating name mapping...');
+    const nameMap = new Map();
+    clientData.forEach(client => {
+      const userName = String(client['User Name'] || '').trim();
+      if (userName) {
+        const parts = userName.split(/\s+/);
+        if (parts.length >= 2) {
+          const nameKey = `${parts[0]} ${parts[parts.length - 1]}`.toUpperCase();
+          if (!nameMap.has(nameKey)) {
+            nameMap.set(nameKey, {
+              'GL Name': client['GL Name'],
+              'TL Name': client['TL Name'],
+              'IS DIY': client['IS DIY'],
+              'Age': client['Age'],
+              'State': client['State']
+            });
+          }
+        }
+      }
+    });
+    console.log('✓ Name map created:', nameMap.size, 'entries');
+    
+    // STEP 3: Map FT data using RM Code first, then name fallback
+    console.log('🔧 Mapping FT data...');
+    let matchedByCode = 0;
+    let matchedByName = 0;
+    let unmatched = 0;
+    
+    ftData.forEach(row => {
+      let mapped = false;
+      
+      // Try RM Code first
+      const rmCode = String(row['RM Code'] || '').trim();
+      if (rmCode && rmCode !== 'nan' && rmCode !== 'NaN') {
+        const codeMatch = rmCodeMap.get(rmCode);
+        if (codeMatch) {
+          row['GL Name'] = codeMatch['GL Name'];
+          row['TL Name'] = codeMatch['TL Name'];
+          row['IS DIY'] = codeMatch['IS DIY'];
+          row['Age'] = codeMatch['Age'];
+          row['State'] = codeMatch['State'];
+          mapped = true;
+          matchedByCode++;
+        }
+      }
+      
+      // Try name matching if not mapped by code
+      if (!mapped) {
+        const rmName = String(row['RM Name'] || '').trim();
+        if (rmName) {
+          const parts = rmName.split(/\s+/);
+          if (parts.length >= 2) {
+            const nameKey = `${parts[0]} ${parts[parts.length - 1]}`.toUpperCase();
+            const nameMatch = nameMap.get(nameKey);
+            if (nameMatch) {
+              row['GL Name'] = nameMatch['GL Name'];
+              row['TL Name'] = nameMatch['TL Name'];
+              row['IS DIY'] = nameMatch['IS DIY'];
+              row['Age'] = nameMatch['Age'];
+              row['State'] = nameMatch['State'];
+              mapped = true;
+              matchedByName++;
+            }
+          }
+        }
+      }
+      
+      // If still not mapped, set Admin - Unit
+      if (!mapped) {
+        row['GL Name'] = `Admin - ${row['Unit Name']}`;
+        row['TL Name'] = '';
+        row['IS DIY'] = 'Unknown';
+        unmatched++;
+      }
+      
+      // Calculate activation bucket and volume bucket
+      row['Activation Month Calculated'] = calcActivationMonth(row['Activation Date'], row['First Trade Date New']);
+      row['FT - Volume Bucket'] = getVolumeBucket(row['First Trade Date Volume']);
+    });
+    
+    console.log('✓ Mapping complete:');
+    console.log('  - By RM Code:', matchedByCode, `(${(matchedByCode/ftData.length*100).toFixed(1)}%)`);
+    console.log('  - By Name:', matchedByName, `(${(matchedByName/ftData.length*100).toFixed(1)}%)`);
+    console.log('  - Admin (unassigned):', unmatched, `(${(unmatched/ftData.length*100).toFixed(1)}%)`);
+    console.log('  - Total assigned:', matchedByCode + matchedByName, `(${((matchedByCode + matchedByName)/ftData.length*100).toFixed(1)}%)`)
     
     // Generate reports
     generateUnitReport();
