@@ -1028,7 +1028,7 @@ function generateGLReport() {
   
   // Get all unique dates from FT data and sort them
   const allDates = [...new Set(ftData.map(row => {
-    const ftDate = row['FT Date'];
+    const ftDate = row['First Trade Date New'];
     if (!ftDate) return null;
     try {
       const date = new Date(ftDate);
@@ -1053,7 +1053,7 @@ function generateGLReport() {
   ftData.forEach(row => {
     const glName = row['GL Name'] || 'Unassigned';
     const tlName = row['TL Name'] || 'Unassigned';
-    const ftDate = row['FT Date'];
+    const ftDate = row['First Trade Date New'];
     
     if (!ftDate) return;
     
@@ -1743,49 +1743,41 @@ function resetUserFilters() {
   renderUserReport(units, [], []);
 }
 function generateAgeReport() {
-  const ageGroups = {'18-25': [], '26-35': [], '36-45': [], '46-55': [], '56+': []};
+  const ageGroups = {'18-25': 0, '26-35': 0, '36-45': 0, '46-55': 0, '56+': 0, 'Unknown': 0};
   const stateData = {};
   
-  clientData.forEach(row => {
+  // Count FTs by Age and State directly from ftData (already mapped!)
+  ftData.forEach(row => {
     const age = parseInt(row['Age']);
     const state = row['State'] || 'Unknown';
-    const code = row['Client Code'];
     
+    // Count by age group
     if (!isNaN(age)) {
-      if (age >= 18 && age <= 25) ageGroups['18-25'].push(code);
-      else if (age >= 26 && age <= 35) ageGroups['26-35'].push(code);
-      else if (age >= 36 && age <= 45) ageGroups['36-45'].push(code);
-      else if (age >= 46 && age <= 55) ageGroups['46-55'].push(code);
-      else if (age >= 56) ageGroups['56+'].push(code);
+      if (age >= 18 && age <= 25) ageGroups['18-25']++;
+      else if (age >= 26 && age <= 35) ageGroups['26-35']++;
+      else if (age >= 36 && age <= 45) ageGroups['36-45']++;
+      else if (age >= 46 && age <= 55) ageGroups['46-55']++;
+      else if (age >= 56) ageGroups['56+']++;
+      else ageGroups['Unknown']++;
+    } else {
+      ageGroups['Unknown']++;
     }
     
-    if (!stateData[state]) stateData[state] = {clients: 0, fts: 0};
-    stateData[state].clients++;
-  });
-  
-  const ageFTs = {};
-  Object.keys(ageGroups).forEach(group => {
-    ageFTs[group] = ftData.filter(r => ageGroups[group].includes(r['Clientcode'])).length;
-  });
-  
-  ftData.forEach(row => {
-    const client = clientData.find(c => c['Client Code'] === row['Clientcode']);
-    if (client) {
-      const state = client['State'] || 'Unknown';
-      if (stateData[state]) stateData[state].fts++;
-    }
+    // Count by state
+    if (!stateData[state]) stateData[state] = 0;
+    stateData[state]++;
   });
   
   let html = '<button class="export-btn" onclick="exportToExcel(\'age\')">📥 Export to Excel</button>';
   
   html += '<div class="insights">';
-  const topAge = Object.keys(ageFTs).reduce((a, b) => ageFTs[a] > ageFTs[b] ? a : b);
-  html += '<div class="insight"><p><strong>Dominant age group:</strong> ' + topAge + ' years with ' + ageFTs[topAge].toLocaleString() + ' FTs (' + ((ageFTs[topAge]/ftData.length)*100).toFixed(1) + '%)</p></div>';
+  const topAge = Object.keys(ageGroups).reduce((a, b) => ageGroups[a] > ageGroups[b] ? a : b);
+  html += '<div class="insight"><p><strong>Dominant age group:</strong> ' + topAge + ' years with ' + ageGroups[topAge].toLocaleString() + ' FTs (' + ((ageGroups[topAge]/ftData.length)*100).toFixed(1) + '%)</p></div>';
   
-  const topState = Object.keys(stateData).reduce((a, b) => stateData[a].fts > stateData[b].fts ? a : b);
-  html += '<div class="insight"><p><strong>Top state:</strong> ' + topState + ' with ' + stateData[topState].fts.toLocaleString() + ' FTs from ' + stateData[topState].clients.toLocaleString() + ' clients</p></div>';
+  const topState = Object.keys(stateData).reduce((a, b) => stateData[a] > stateData[b] ? a : b);
+  html += '<div class="insight"><p><strong>Top state:</strong> ' + topState + ' with ' + stateData[topState].toLocaleString() + ' FTs</p></div>';
   
-  html += '<div class="insight"><p><strong>Geographic reach:</strong> ' + Object.keys(stateData).length + ' states with active clients</p></div>';
+  html += '<div class="insight"><p><strong>Geographic reach:</strong> ' + Object.keys(stateData).length + ' states with active FTs</p></div>';
   html += '</div>';
   
   html += '<div class="charts">';
@@ -1793,27 +1785,25 @@ function generateAgeReport() {
   html += '<div class="chart-box"><div class="chart-title">Top 10 States</div><canvas id="ageChart2"></canvas></div>';
   html += '</div>';
   
-  html += '<div class="table-section"><h2>Age Group Analysis</h2><div class="table-container"><table><thead><tr><th>Age Group</th><th>Total Clients</th><th>FTs Generated</th><th>Conversion %</th></tr></thead><tbody>';
+  html += '<div class="table-section"><h2>Age Group Analysis</h2><div class="table-container"><table><thead><tr><th>Age Group</th><th>FTs Generated</th><th>% of Total</th></tr></thead><tbody>';
   Object.keys(ageGroups).forEach(group => {
-    const clients = ageGroups[group].length;
-    const fts = ageFTs[group];
-    const conv = clients > 0 ? ((fts/clients)*100).toFixed(2) : '0.00';
-    html += '<tr><td>' + group + '</td><td>' + clients.toLocaleString() + '</td><td>' + fts.toLocaleString() + '</td><td>' + conv + '%</td></tr>';
+    const fts = ageGroups[group];
+    const pct = ((fts/ftData.length)*100).toFixed(2);
+    html += '<tr><td>' + group + '</td><td>' + fts.toLocaleString() + '</td><td>' + pct + '%</td></tr>';
   });
   html += '</tbody></table></div></div>';
   
-  html += '<div class="table-section"><h2>Top 15 States by FT Count</h2><div class="table-container"><table><thead><tr><th>State</th><th>Total Clients</th><th>FTs Generated</th><th>% of Total FTs</th><th>Conversion %</th></tr></thead><tbody>';
-  const top15States = Object.keys(stateData).sort((a, b) => stateData[b].fts - stateData[a].fts).slice(0, 15);
+  html += '<div class="table-section"><h2>Top 15 States by FT Count</h2><div class="table-container"><table><thead><tr><th>State</th><th>FTs Generated</th><th>% of Total</th></tr></thead><tbody>';
+  const top15States = Object.keys(stateData).sort((a, b) => stateData[b] - stateData[a]).slice(0, 15);
   top15States.forEach(state => {
-    const pct = ((stateData[state].fts/ftData.length)*100).toFixed(2);
-    const conv = ((stateData[state].fts/stateData[state].clients)*100).toFixed(2);
-    html += '<tr><td>' + state + '</td><td>' + stateData[state].clients.toLocaleString() + '</td><td>' + stateData[state].fts.toLocaleString() + '</td><td>' + pct + '%</td><td>' + conv + '%</td></tr>';
+    const pct = ((stateData[state]/ftData.length)*100).toFixed(2);
+    html += '<tr><td>' + state + '</td><td>' + stateData[state].toLocaleString() + '</td><td>' + pct + '%</td></tr>';
   });
   html += '</tbody></table></div></div>';
   
   document.getElementById('ageReport').innerHTML = html;
   
-  chartData.age = {ageGroups, ageFTs, stateData};
+  chartData.age = {ageGroups, stateData};
   
   setTimeout(() => {
     if (charts.ageChart1) charts.ageChart1.destroy();
@@ -1860,37 +1850,24 @@ function generateDIYReport() {
   const allDates = [...new Set(ftData.map(r => formatDateKey(r['First Trade Date New'])).filter(Boolean))];
   const dates = sortDates(allDates);
   
-  // Count DIY vs Non-DIY accounts
-  const diyAccounts = clientData.filter(c => c['IS DIY'] === 'Y').length;
-  const nonDIYAccounts = clientData.filter(c => c['IS DIY'] === 'N').length;
-  const totalAccounts = diyAccounts + nonDIYAccounts;
-  
-  // Count FTs from DIY vs Non-DIY
-  const diyFTs = ftData.filter(row => {
-    const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
-    return client && client['IS DIY'] === 'Y';
-  }).length;
-  
-  const nonDIYFTs = ftData.filter(row => {
-    const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
-    return client && client['IS DIY'] === 'N';
-  }).length;
-  
-  const totalFTs = diyFTs + nonDIYFTs;
+  // Count FTs from DIY vs Non-DIY (already mapped in ftData!)
+  const diyFTs = ftData.filter(row => row['IS DIY'] === 'Y').length;
+  const nonDIYFTs = ftData.filter(row => row['IS DIY'] === 'N').length;
+  const unknownFTs = ftData.filter(row => row['IS DIY'] === 'Unknown' || !row['IS DIY']).length;
+  const totalFTs = ftData.length;
   
   // Date-wise breakdown
   const dateData = {};
   dates.forEach(date => {
-    dateData[date] = {DIY: 0, 'Non-DIY': 0};
+    dateData[date] = {DIY: 0, 'Non-DIY': 0, Unknown: 0};
     
     ftData.filter(r => formatDateKey(r['First Trade Date New']) === date).forEach(row => {
-      const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
-      if (client) {
-        if (client['IS DIY'] === 'Y') {
-          dateData[date].DIY++;
-        } else if (client['IS DIY'] === 'N') {
-          dateData[date]['Non-DIY']++;
-        }
+      if (row['IS DIY'] === 'Y') {
+        dateData[date].DIY++;
+      } else if (row['IS DIY'] === 'N') {
+        dateData[date]['Non-DIY']++;
+      } else {
+        dateData[date].Unknown++;
       }
     });
   });
@@ -1899,16 +1876,15 @@ function generateDIYReport() {
   const unitData = {};
   units.forEach(unit => {
     const unitFTs = ftData.filter(r => r['Unit Name'] === unit);
-    unitData[unit] = {DIY: 0, 'Non-DIY': 0};
+    unitData[unit] = {DIY: 0, 'Non-DIY': 0, Unknown: 0};
     
     unitFTs.forEach(row => {
-      const client = clientData.find(c => String(c['Client Code']).trim() === String(row['Clientcode']).trim());
-      if (client) {
-        if (client['IS DIY'] === 'Y') {
-          unitData[unit].DIY++;
-        } else if (client['IS DIY'] === 'N') {
-          unitData[unit]['Non-DIY']++;
-        }
+      if (row['IS DIY'] === 'Y') {
+        unitData[unit].DIY++;
+      } else if (row['IS DIY'] === 'N') {
+        unitData[unit]['Non-DIY']++;
+      } else {
+        unitData[unit].Unknown++;
       }
     });
   });
@@ -1916,13 +1892,10 @@ function generateDIYReport() {
   let html = '<button class="export-btn" onclick="exportToExcel(\'diy\')">📥 Export to Excel</button>';
   
   html += '<div class="insights">';
-  html += '<div class="insight"><p><strong>DIY Accounts:</strong> ' + diyAccounts.toLocaleString() + ' (' + ((diyAccounts/totalAccounts)*100).toFixed(1) + '%) generated ' + diyFTs.toLocaleString() + ' FTs (' + ((diyFTs/totalFTs)*100).toFixed(1) + '%)</p></div>';
-  html += '<div class="insight"><p><strong>Non-DIY Accounts:</strong> ' + nonDIYAccounts.toLocaleString() + ' (' + ((nonDIYAccounts/totalAccounts)*100).toFixed(1) + '%) generated ' + nonDIYFTs.toLocaleString() + ' FTs (' + ((nonDIYFTs/totalFTs)*100).toFixed(1) + '%)</p></div>';
-  
-  const diyConversion = ((diyFTs/diyAccounts)*100).toFixed(2);
-  const nonDIYConversion = ((nonDIYFTs/nonDIYAccounts)*100).toFixed(2);
-  html += '<div class="insight"><p><strong>DIY Conversion:</strong> ' + diyConversion + '% (avg ' + (diyFTs/diyAccounts).toFixed(2) + ' FTs per account) - ' + (parseFloat(diyConversion) > parseFloat(nonDIYConversion) ? 'Higher' : 'Lower') + ' than Non-DIY</p></div>';
-  html += '<div class="insight"><p><strong>Non-DIY Conversion:</strong> ' + nonDIYConversion + '% (avg ' + (nonDIYFTs/nonDIYAccounts).toFixed(2) + ' FTs per account) - ' + (parseFloat(nonDIYConversion) > parseFloat(diyConversion) ? 'Higher' : 'Lower') + ' than DIY</p></div>';
+  html += '<div class="insight"><p><strong>DIY FTs:</strong> ' + diyFTs.toLocaleString() + ' (' + ((diyFTs/totalFTs)*100).toFixed(1) + '% of total FTs)</p></div>';
+  html += '<div class="insight"><p><strong>Non-DIY FTs:</strong> ' + nonDIYFTs.toLocaleString() + ' (' + ((nonDIYFTs/totalFTs)*100).toFixed(1) + '% of total FTs)</p></div>';
+  html += '<div class="insight"><p><strong>Unknown FTs:</strong> ' + unknownFTs.toLocaleString() + ' (' + ((unknownFTs/totalFTs)*100).toFixed(1) + '% - not in May client master)</p></div>';
+  html += '<div class="insight"><p><strong>Total FTs:</strong> ' + totalFTs.toLocaleString() + ' across all categories</p></div>';
   html += '</div>';
   
   html += '<div class="charts">';
