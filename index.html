@@ -314,22 +314,38 @@ window.addEventListener('DOMContentLoaded', async function() {
   console.log('🔄 Loading data from Firebase...');
   
   try {
-    // Load ftData and clientData from separate nodes
-    const [ftSnapshot, clientSnapshot, metaSnapshot] = await Promise.all([
+    // Load ftData and metadata
+    const [ftSnapshot, metaSnapshot] = await Promise.all([
       database.ref('dashboard-data/ftData').once('value'),
-      database.ref('dashboard-data/clientData').once('value'),
       database.ref('dashboard-data/metadata').once('value')
     ]);
     
     const ftDataStr = ftSnapshot.val();
-    const clientDataStr = clientSnapshot.val();
     const metadata = metaSnapshot.val();
     
-    if (ftDataStr && clientDataStr) {
+    // Load clientData chunks
+    console.log('📦 Loading clientData chunks...');
+    const clientChunksSnapshot = await database.ref('dashboard-data/clientData').once('value');
+    const clientChunksObj = clientChunksSnapshot.val();
+    
+    if (ftDataStr && clientChunksObj) {
       console.log('✓ Data loaded from Firebase');
       
-      // Parse JSON strings
-      clientData = JSON.parse(clientDataStr);
+      // Reconstruct clientData from chunks
+      clientData = [];
+      const chunkKeys = Object.keys(clientChunksObj).sort((a, b) => {
+        const numA = parseInt(a.replace('chunk', ''));
+        const numB = parseInt(b.replace('chunk', ''));
+        return numA - numB;
+      });
+      
+      for (const key of chunkKeys) {
+        const chunk = JSON.parse(clientChunksObj[key]);
+        clientData = clientData.concat(chunk);
+        console.log(`✓ Loaded ${key}: ${chunk.length} records`);
+      }
+      
+      // Parse ftData
       ftData = JSON.parse(ftDataStr);
       
       console.log('📊 Data loaded:', {
@@ -850,8 +866,20 @@ document.getElementById('processBtn').addEventListener('click', async function()
     // Save ftData first (smaller, more critical)
     await database.ref('dashboard-data/ftData').set(JSON.stringify(ftData));
     
-    // Save clientData separately
-    await database.ref('dashboard-data/clientData').set(JSON.stringify(clientData));
+    // Split clientData into chunks (each under 10MB)
+    const chunkSize = 2000; // ~2000 records per chunk (~3MB each)
+    const clientChunks = [];
+    for (let i = 0; i < clientData.length; i += chunkSize) {
+      clientChunks.push(clientData.slice(i, i + chunkSize));
+    }
+    
+    console.log(`📦 Splitting clientData into ${clientChunks.length} chunks...`);
+    
+    // Save each chunk separately
+    for (let i = 0; i < clientChunks.length; i++) {
+      await database.ref(`dashboard-data/clientData/chunk${i}`).set(JSON.stringify(clientChunks[i]));
+      console.log(`✓ Saved client chunk ${i + 1}/${clientChunks.length}`);
+    }
     
     // Save metadata with secret for verification
     await database.ref('dashboard-data/metadata').set({
