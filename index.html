@@ -314,19 +314,28 @@ window.addEventListener('DOMContentLoaded', async function() {
   console.log('🔄 Loading data from Firebase...');
   
   try {
-    const snapshot = await database.ref('dashboard-data').once('value');
-    const data = snapshot.val();
+    // Load ftData and clientData from separate nodes
+    const [ftSnapshot, clientSnapshot, metaSnapshot] = await Promise.all([
+      database.ref('dashboard-data/ftData').once('value'),
+      database.ref('dashboard-data/clientData').once('value'),
+      database.ref('dashboard-data/metadata').once('value')
+    ]);
     
-    if (data && data.clientData && data.ftData) {
+    const ftDataStr = ftSnapshot.val();
+    const clientDataStr = clientSnapshot.val();
+    const metadata = metaSnapshot.val();
+    
+    if (ftDataStr && clientDataStr) {
       console.log('✓ Data loaded from Firebase');
       
       // Parse JSON strings
-      clientData = typeof data.clientData === 'string' ? JSON.parse(data.clientData) : data.clientData;
-      ftData = typeof data.ftData === 'string' ? JSON.parse(data.ftData) : data.ftData;
+      clientData = JSON.parse(clientDataStr);
+      ftData = JSON.parse(ftDataStr);
       
       console.log('📊 Data loaded:', {
         clientRecords: clientData.length,
-        ftRecords: ftData.length
+        ftRecords: ftData.length,
+        lastUpdated: metadata?.lastUpdated || 'Unknown'
       });
       
       // Check sample data
@@ -835,18 +844,25 @@ document.getElementById('processBtn').addEventListener('click', async function()
     reportsGenerated = true;
     btn.textContent = '⏳ Saving to cloud...';
     
-    // Save to Firebase (as JSON string to avoid key restrictions)
-    const dataToSave = {
-      clientData: JSON.stringify(clientData),
-      ftData: JSON.stringify(ftData),
-      lastUpdated: new Date().toISOString(),
-      secret: 'Megha7890Upload'  // Security key (remove after successful write)
-    };
+    // Save to Firebase in separate nodes to avoid 10MB limit
+    const timestamp = new Date().toISOString();
     
-    await database.ref('dashboard-data').set(dataToSave);
+    // Save ftData first (smaller, more critical)
+    await database.ref('dashboard-data/ftData').set(JSON.stringify(ftData));
+    
+    // Save clientData separately
+    await database.ref('dashboard-data/clientData').set(JSON.stringify(clientData));
+    
+    // Save metadata with secret for verification
+    await database.ref('dashboard-data/metadata').set({
+      lastUpdated: timestamp,
+      ftCount: ftData.length,
+      clientCount: clientData.length,
+      secret: 'Megha7890Upload'
+    });
     
     // Remove secret after write
-    await database.ref('dashboard-data/secret').remove();
+    await database.ref('dashboard-data/metadata/secret').remove();
     
     btn.textContent = '✅ Saved to Cloud!';
     
